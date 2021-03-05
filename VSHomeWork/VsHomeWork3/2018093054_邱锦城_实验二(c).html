@@ -1,0 +1,327 @@
+
+<!-- saved from url=(0130)https://elearning.szu.edu.cn/bbcswebdav/pid-495218-dt-content-rid-3810139_1/courses/201920202150298000103/index-p1-incomplete.html -->
+<html><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+  <style>
+    body {
+      font-family: Helvetica, Arial, sans-serif
+    }
+
+    h1 {
+      background-color: steelblue;
+      color:white;
+      padding: 5px;
+    }
+    h2 {
+      color: black;
+    }
+
+    svg {
+      border: 2px solid grey;
+    }
+
+    .mainView{
+      display: flex;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Global Sales</h1>
+  <div class="mainView">
+    <div>
+      <h2>Categories：sales and profit</h2>
+      <svg id="CategoryChart">
+        <g id = "rects"></g>
+        <g id = "xAxis"></g>
+        <g id = "yAxis"></g>
+      </svg>
+      <script src="d3/d3.js"></script>
+      <script>
+        var barChartWidth = 620,
+                barChartHeight = 620;
+        var barChartPadding = {
+          top:30,
+          left:80,
+          bottom:30,
+          right:30
+        };
+        var barChart = d3.select("#CategoryChart")
+        .attr("width",barChartWidth)
+        .attr("height",barChartHeight);
+
+        var barData;
+        var nestBySubCategory;
+        d3.csv("./data/sub-categories-states-sales.csv").then(function(data){
+          var dataUS = data.filter(function (d) {
+            return   d.country ==="United States";
+          });
+          // 转换为数值类型
+          dataUS.forEach((item,i)=>{
+            item.profit = +item.profit;
+            item.sales = +item.sales;
+          });
+          // 按类别重新组织数据
+          nestBySubCategory = d3.nest()
+          .key(function(d) {
+            return d.subCategory;
+          })
+          .entries(dataUS);
+
+          barData = nestBySubCategory.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            return {
+              subCategory: d.key,
+              profit: sumProfit,
+              sales: sumSales
+            };
+          });
+          // 转换为映射表形式，方便后续快速检索指定类别
+          nestBySubCategory = d3.map(nestBySubCategory, function (d) {
+            return d.key;
+          });
+        }).then(function () {
+          drawBarChart();// 根据barData来绘制柱状图
+        });
+
+
+        function drawBarChart() {
+          //定义水平方向比例尺
+          var maxSales = d3.max(barData,function (d) {
+            return d.sales;
+          });//得到最大销量
+          var xScale = d3.scaleLinear()
+          .domain([0,maxSales])//设置输入域
+          .range([barChartPadding.left,barChartWidth-barChartPadding.right]);
+
+          //定义垂直方向比例尺
+          var yScale = d3.scaleBand()
+          .domain(barData.map(function (d) {
+            return d.subCategory;
+          }))//得到所有类别信息
+          .rangeRound([barChartPadding.top,barChartHeight-barChartPadding.bottom])//设置输出范围
+          .paddingInner(0.3);
+
+          //定义颜色比例尺
+          var maxProfit = d3.max(barData,function (d) {
+            return d.profit;
+          });
+          var color = d3.scaleDiverging()
+          .domain([-maxProfit,0,maxProfit])
+          .interpolator(d3.interpolateRdBu);
+
+
+
+          //绑定数据
+          var bindings = barChart.selectAll("rect")
+                  .data(barData);
+          var updateRects = bindings;
+          var enterRects = bindings.enter();
+          var exitRects = bindings.exit();
+
+          //enter部分处理方法
+          enterRects.append("rect")
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x", xScale(0)+1)
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          });
+
+
+          // update部分处理方法
+          updateRects.data(barData)
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x",xScale(0)+1)
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          });
+
+          //exit部分处理方法
+          exitRects.remove();
+
+         //绘制X坐标轴
+         var xAxis = d3.axisBottom(xScale)
+         .ticks(5);
+         d3.select("#xAxis").call(xAxis)
+         .attr("transform","translate(0,"+(barChartHeight-barChartPadding.bottom)+")");
+
+          //绘制Y坐标轴。
+          var yAxis = d3.axisLeft(yScale);
+          d3.select('#yAxis').call(yAxis)
+          .attr("transform","translate(" + xScale.range()[0] +")");
+        }
+      </script>
+    </div>
+    <div>
+      <h2>Area：profit and categories</h2>
+      <svg id="Map"></svg>
+      <script src="d3/d3.js"></script>
+      <script src="https://unpkg.com/topojson-client@3"></script>
+      <script>
+        d3.json("./data/states-albers-10m.json").then(function (mapInfo) {
+          var profitInfoMap;
+          var nestBySubState;
+          d3.csv("./data/sub-categories-states-sales.csv").then(function (data) {
+           var dataUS = data.filter(function (d) {
+            return   d.country ==="United States";//对数据进行过滤，得到美国数据
+          });
+          // 转换为数值类型
+          dataUS.forEach((item,i)=>{
+            item.profit = +item.profit;
+            item.sales = +item.sales;
+          });
+          // 按州重新组织数据
+          nestBySubState = d3.nest()
+          .key(function(d) {
+            return d.state;
+          })
+          .entries(dataUS);
+
+          profitInfoMap = nestBySubState.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            return {
+              state: d.key,
+              profit: sumProfit,
+              sales: sumSales
+            };
+          });
+          // 转换为映射表形式，方便后续快速检索指定类别
+          nestBySubState = d3.map(nestBySubState, function (d) {
+            return d.key;
+          });
+
+
+            drawMap();
+            function drawMap() {
+
+              var profitMap = profitInfoMap.reduce(function(acc, cur) {
+                acc.set(cur.state, +cur.profit);
+                return acc;
+                }, d3.map());//将重新组织后的数据转换为map格式
+
+              var MaxProfit = d3.max(profitInfoMap,function (d) {
+                return d.profit;//获取最大profit
+              });
+
+              var MinProfit = d3.min(profitInfoMap,function (d) {
+                return d.profit;//获取最小profit
+              });
+
+              // 绘制地图区域
+              // 使用scaleQuantize作为颜色比例尺
+              var color = d3.scaleQuantize([MinProfit, MaxProfit], d3.schemeReds[8]);
+
+              var path = d3.geoPath();//路径生成器
+              var svg = d3.select("#Map")//设置svg元素大小
+                      .attr("width", 620)
+                      .attr("height", 620);
+
+              svg.append("g")
+                      .selectAll("path")
+                      .data(topojson.feature(mapInfo, mapInfo.objects.states).features)
+                      .join("path")
+                      .attr("d", path)
+                      //对svg元素进行等比缩放及平移
+                      .attr("transform", `scale(${0.6})` + `translate(${50},${200})`)
+                      .attr("fill", function (d) {
+                        var profit = profitMap.get(d.properties.name);
+                        if (profit){
+                          return color(profit);
+                        }else {
+                          return "#ccc";//如果没有profit数据，这个州的颜色就设置成灰色
+                        }
+                      });
+
+
+              // 绘制区域的边界
+              svg.append("g").append("path")
+                      .datum(topojson.mesh(mapInfo, mapInfo.objects.states, (a, b) => a !== b))
+                      .attr("fill", "none")
+                      .attr("stroke", "white")
+                      .attr("stroke-linejoin", "round")
+                      .attr("d", path)
+                      //对svg元素进行等比缩放及平移
+                      .attr("transform", `scale(${0.6})` + `translate(${50},${200})`);
+
+              // 绘制图例
+              var legend = svg.append("g")
+                      .attr("id", "legend")
+                      .attr("transform", "translate(340, 30)");
+              var legendWidth = 260,
+                      legendHeight = 30,
+                      legendTop = 16; // 绘制标题区域
+
+              // 绘制矩形
+              // 从颜色的编号映射成图例上的位置
+              var x = d3.scaleLinear()
+              .domain([0, color.range().length])
+              .rangeRound([0, legendWidth]);
+              // 从颜色的编号映射成失业率的数值
+              var values = d3.scaleLinear()
+                      .domain(x.domain())
+                      .range(color.domain());
+
+              legend.selectAll("rect")
+                .data(color.range())
+                .join("rect")
+                .attr("x", (d, i) => x(i))
+                .attr("y", legendTop)
+                .attr("width", (d, i) => x(i + 1) - x(i))
+                .attr("height", legendHeight - legendTop)
+                .attr("fill", d => d);
+
+                //绘制图例的标题
+                var title = "Profit of each state($)";//图例标题
+                legend.append("text")
+                .attr("class","title")
+                .text(title)
+                .attr("font-size","16px")//设置字体及字体大小
+                .attr("transform",`translate(${0}, ${legendTop/2})`);//设置标题位置
+
+              //绘制图例的坐标轴
+              var format = d3.format(".0f");//设置坐标轴刻度
+              var legendAxis = d3.axisBottom(x);//设置x轴位置
+
+              legend.append("g")
+              .call(legendAxis.ticks(6)
+                      .tickFormat(function (d) {
+                        return format(values(d))
+                      }))//设置刻度尺大小
+              .attr("transform",`translate(${0}, ${legendHeight})`);//设置坐标轴位置
+            }
+          });
+        });
+      </script>
+    </div>
+    <div>
+      <h2>Other</h2>
+      <svg id="Other"></svg>
+    </div>
+  </div>
+
+
+
+</body></html>

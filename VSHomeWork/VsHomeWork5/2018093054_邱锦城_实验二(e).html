@@ -1,0 +1,1001 @@
+
+<!-- saved from url=(0130)https://elearning.szu.edu.cn/bbcswebdav/pid-495218-dt-content-rid-3810139_1/courses/201920202150298000103/index-p1-incomplete.html -->
+<html><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+  <style>
+    body {
+      font-family: Helvetica, Arial, sans-serif
+    }
+
+    h1 {
+      background-color: steelblue;
+      color:white;
+      padding: 5px;
+    }
+    h2 {
+      color: black;
+    }
+
+    svg {
+      border: 2px solid grey;
+    }
+
+    .mainView{
+      display: flex;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Global Sales</h1>
+  <div class="mainView">
+    <div>
+      <h2 id="CategoryTitle">Categories：sales and profit</h2>
+      <svg id="CategoryChart">
+        <g id = "rects"></g>
+        <g id = "xAxis"></g>
+        <g id = "yAxis"></g>
+      </svg>
+      <script src="d3/d3.js"></script>
+      <script>
+        var barChartWidth = 620,
+                barChartHeight = 620;
+        var barChartPadding = {
+          top:30,
+          left:80,
+          bottom:30,
+          right:30
+        };
+        var barChart = d3.select("#CategoryChart")
+        .attr("width",barChartWidth)
+        .attr("height",barChartHeight);
+
+        var barData;
+        var nestBySubCategory;
+        d3.csv("./data/sub-categories-states-sales.csv").then(function(data){
+          var dataUS = data.filter(function (d) {
+            return   d.country ==="United States";
+          });
+          // 转换为数值类型
+          dataUS.forEach((item,i)=>{
+            item.profit = +item.profit;
+            item.sales = +item.sales;
+          });
+          // 按类别重新组织数据
+          nestBySubCategory = d3.nest()
+          .key(function(d) {
+            return d.subCategory;
+          })
+          .entries(dataUS);
+
+          barData = nestBySubCategory.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            return {
+              subCategory: d.key,
+              profit: sumProfit,
+              sales: sumSales
+            };
+          });
+          // 转换为映射表形式，方便后续快速检索指定类别
+          nestBySubCategory = d3.map(nestBySubCategory, function (d) {
+            return d.key;
+          });
+        }).then(function (d) {
+
+          drawBarChart();// 根据barData来绘制柱状图
+        });
+
+
+
+        function drawBarChart() {
+          //定义水平方向比例尺
+          var maxSales = d3.max(barData,function (d) {
+            return d.sales;
+          });//得到最大销量
+          var xScale = d3.scaleLinear()
+                  .domain([0,maxSales])//设置输入域
+           .range([barChartPadding.left,barChartWidth-barChartPadding.right]);
+
+          //定义垂直方向比例尺
+          var yScale = d3.scaleBand()
+                  .domain(barData.map(function (d) {
+                    return d.subCategory;
+                  }))//得到所有类别信息
+                  .rangeRound([barChartPadding.top,barChartHeight-barChartPadding.bottom])//设置输出范围
+                  .paddingInner(0.3);
+
+          //定义颜色比例尺
+          var maxProfit = d3.max(barData,function (d) {
+            return d.profit;
+          });
+          var color = d3.scaleDiverging()
+                  .domain([-maxProfit,0,maxProfit])
+                  .interpolator(d3.interpolateRdBu);
+
+          //绑定数据
+          var bindings = barChart.select("#rects").selectAll("rect")
+                  .data(barData,function (d) {
+                    return d.subCategory;
+                  });
+          var updateRects = bindings;
+          var enterRects = bindings.enter();
+          var exitRects = bindings.exit();
+
+
+          //enter部分处理方法
+          enterRects.append("rect")
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x", xScale(0))
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          })
+          .append("title")
+          .text(function (d) {
+            return "profit: "+d3.format("0.1f")(d.profit)+"\n"+"sale: "+d3.format("0.1f")(d.sales);
+          });
+
+          // update部分处理方法
+          updateRects.data(barData)
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x",xScale(0))
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          })
+          .append("title")
+          .text(function (d) {
+            return  "profit: "+d3.format("0.1f")(d.profit)+"\n"+"sale: "+d3.format("0.1f")(d.sales);
+          });
+
+          //exit部分处理方法
+          exitRects.remove();
+
+         //绘制X坐标轴
+         var xAxis = d3.axisBottom(xScale)
+         .ticks(5);
+         barChart.select("#xAxis").call(xAxis)
+         .attr("transform","translate(0,"+(barChartHeight-barChartPadding.bottom)+")");
+
+          //绘制Y坐标轴。
+          var yAxis = d3.axisLeft(yScale);
+          barChart.select("#yAxis").call(yAxis)
+          .attr("transform","translate(" + xScale.range()[0] +")");
+
+          barChart.select("#rects").selectAll("rect").on("click",function (d) {
+            barChart.select("#rects").selectAll("rect").style("stroke","none");
+            d3.select(this).style("stroke","red");
+            updateMap(d.subCategory);
+          });
+
+          var referenceRect = barChart.insert("g","#rects").append("rect")
+          .attr("width",xScale.range()[1]-xScale.range()[0])
+          .attr("height",yScale.range()[1]-yScale.range()[0])
+          .attr("x",xScale.range()[0])
+          .attr("y",yScale.range()[0])
+          .attr("fill","white")
+          .attr("opacity","0.1");
+
+          referenceRect.on("click",function () {
+            barChart.select("#rects").selectAll("rect").style("stroke","none");
+            updateMap("all");
+          })
+        }
+
+        function updateBar(state) {
+            if (state == "all") {
+            d3.select("#CategoryTitle").text("Categories: sales and profits");
+            updateBarByNewProfit(barData);
+          } else {
+              d3.select("#CategoryTitle").text("Categories: sales and profits in " + state);
+              // 得到该产品在每个州的销售信息
+              if(nestBySubState.get(state)) {
+                var curprofitInfo = nestBySubState.get(state).values;
+                updateBarByNewProfit(curprofitInfo);
+              }else{
+                var curprofitInfo = barData.map((obj,i) =>{
+                var newobj = {};
+                newobj.profit = obj.profit;
+                newobj.sales = obj.sales;
+                newobj.subCategory = obj.subCategory;
+                return newobj;
+              });
+                for(var i=0; i<curprofitInfo.length; i++){
+                  curprofitInfo[i].profit = 0;
+                  curprofitInfo[i].sales = 0;
+                }
+
+                updateBarByNewProfit(curprofitInfo);
+              }
+            }
+          }
+
+          function updateBarByNewProfit(curData) {
+          //数据处理
+          var barData_copy = barData.map((obj,i) =>{
+            var newobj = {};
+            newobj.profit = obj.profit;
+            newobj.sales = obj.sales;
+            newobj.subCategory = obj.subCategory;
+            return newobj;
+          });
+
+          for(var i=0; i<barData_copy.length; i++){
+            var cur_subCategory = barData_copy[i].subCategory;
+            var flag = 0;
+            for(var j=0;j<curData.length;j++){
+              if(cur_subCategory == curData[j].subCategory){
+                barData_copy[i].profit = curData[j].profit;
+                barData_copy[i].sales = curData[j].sales;
+                flag = 1;
+              }
+            }
+
+            if(flag == 0){
+              barData_copy[i].profit = 0;
+              barData_copy[i].sales = 0;
+            }
+          }
+
+          //定义水平方向比例尺
+          var maxSales = d3.max(barData_copy,function (d) {
+            return d.sales;
+          });//得到最大销量
+          var xScale = d3.scaleLinear()
+                  .domain([0,maxSales])//设置输入域
+           .range([barChartPadding.left,barChartWidth-barChartPadding.right]);
+
+          //定义垂直方向比例尺
+          var yScale = d3.scaleBand()
+                  .domain(barData.map(function (d) {
+                    return d.subCategory;
+                  }))//得到所有类别信息
+                  .rangeRound([barChartPadding.top,barChartHeight-barChartPadding.bottom])//设置输出范围
+                  .paddingInner(0.3);
+
+          //定义颜色比例尺
+          var maxProfit = d3.max(barData_copy,function (d) {
+            return d.profit;
+          });
+          var color = d3.scaleDiverging()
+                  .domain([-maxProfit,0,maxProfit])
+                  .interpolator(d3.interpolateRdBu);
+
+          var bars = barChart.select("#rects").selectAll("rect")
+                  .data(curData,function (d) {
+                    return d.subCategory;
+                  });
+
+          bars.join("rect")
+                  .transition()
+                  .duration(250)
+                  .ease(d3.easeLinear)
+                  .attr("width",function (d) {
+                    return xScale(d.sales)-xScale(0);
+                  })
+                  .attr("height", yScale.bandwidth())
+                  .attr("x", xScale.range()[0])
+                  .attr("y",function (d) {
+                      return yScale(d.subCategory);
+                  })
+                  .attr("fill",function (d) {
+                    return color(d.profit);
+                  })
+                  .select("title")
+                  .text(function (d) {
+                    return "profit: "+d3.format("0.1f")(d.profit)+"\n"+"sale: "+d3.format("0.1f")(d.sales);
+                  });
+
+          var xAxis = d3.axisBottom(xScale)
+                  .ticks(5);
+          barChart.select("#xAxis").call(xAxis)
+                  .attr("transform","translate(0,"+(barChartHeight-barChartPadding.bottom)+")");
+
+          barChart.select("#rects").selectAll("rect").on("click",function (d) {
+            barChart.select("#rects").selectAll("rect").style("stroke","none");
+            d3.select(this).style("stroke","red");
+            updateMap(d.subCategory);
+          });
+
+          var referenceRect = barChart.insert("g","#rects").append("rect")
+          .attr("width",xScale.range()[1]-xScale.range()[0])
+          .attr("height",yScale.range()[1]-yScale.range()[0])
+          .attr("x",xScale.range()[0])
+          .attr("y",yScale.range()[0])
+          .attr("fill","white")
+          .attr("opacity","0.1");
+
+          referenceRect.on("click",function () {
+            barChart.select("#rects").selectAll("rect").style("stroke","none");
+            updateMap("all");
+          })
+        }
+      </script>
+    </div>
+    <div>
+      <h2 id="MapTitle">Area：profits of all categories</h2>
+      <svg id="Map"></svg>
+      <script src="d3/d3.js"></script>
+      <script src="https://unpkg.com/topojson-client@3"></script>
+      <script>
+        var profitInfoMap;
+        var allprofitInfo;
+        var nestBySubState;
+        var mapSpace = d3.select("#Map")//设置svg元素大小
+                    .attr("width", 620)
+                    .attr("height", 620);
+        d3.json("./data/states-albers-10m.json").then(function (mapInfo) {
+
+          d3.csv("./data/sub-categories-states-sales.csv").then(function (data) {
+           var dataUS = data.filter(function (d) {
+            return   d.country ==="United States";//对数据进行过滤，得到美国数据
+          });
+          // 转换为数值类型
+          dataUS.forEach((item,i)=>{
+            item.profit = +item.profit;
+            item.sales = +item.sales;
+          });
+          // 按州重新组织数据
+          nestBySubState = d3.nest()
+          .key(function(d) {
+            return d.state;
+          })
+          .entries(dataUS);
+
+          profitInfoMap = nestBySubState.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            return {
+              state: d.key,
+              profit: sumProfit,
+              sales: sumSales
+            };
+          });
+          // 转换为映射表形式，方便后续快速检索指定类别
+          allprofitInfo = d3.map(profitInfoMap, function (d) {
+            return d.state;
+          });
+
+          nestBySubState = d3.map(nestBySubState, function (d) {
+            return d.key;
+          });
+
+          drawMap();
+          function drawMap() {
+             var extent = d3.extent(allprofitInfo.values(), d => d.profit);
+            // 绘制地图区域
+            // 使用scaleQuantize作为颜色比例尺
+            var color = d3.scaleQuantize([-extent[1], extent[1]], d3.schemeRdBu[8]);
+            var path = d3.geoPath();//路径生成器
+
+            var referenceMap = mapSpace.append("rect")
+            .attr("width",620)
+            .attr("height",620)
+            .attr("x",0)
+            .attr("y",0)
+            .attr("fill","white")
+            .attr("opacity","0.2");
+
+            referenceMap.on("click",function () {
+              mapSpace.selectAll("path")
+                      .style("stroke","white")
+                      .style("stroke-width",1)
+                      .style("stroke-linejoin", "round");
+              updateBar("all");
+            });
+
+            mapSpace.append("g")
+                    .selectAll("path")
+                    .data(topojson.feature(mapInfo, mapInfo.objects.states).features)
+                    .join("path")
+                    .attr("d", path)
+                    //对svg元素进行等比缩放及平移
+                    .attr("transform", `scale(${0.6})` + `translate(${50},${200})`)
+                    .attr("fill", function (d) {
+                      var info = allprofitInfo.get(d.properties.name);
+                      if (info){
+                        return color(info.profit);
+                      }else {
+                        return "gray";//如果没有profit数据，这个州的颜色就设置成灰色
+                      }
+                    })
+                    .append("title")
+                    .text(function (d) {
+                      var info = allprofitInfo.get(d.properties.name);
+                      if (info){
+                        return d.properties.name+"\nprofit: "+d3.format("0.1f")(info.profit);
+                      }else {
+                        return "Data Unknown";//如果没有profit数据，标记为未知
+                      }
+                    });
+
+            // 绘制区域的边界
+            mapSpace.append("g").append("path")
+                    .datum(topojson.mesh(mapInfo, mapInfo.objects.states, (a, b) => a !== b))
+                    .attr("fill", "none")
+                    .attr("stroke", "white")
+                    .attr("stroke-linejoin", "round")
+                    .attr("d", path)
+                    //对svg元素进行等比缩放及平移
+                    .attr("transform", `scale(${0.6})` + `translate(${50},${200})`);
+
+            mapSpace.selectAll("path").on("click",function (d) {
+              mapSpace.selectAll("path")
+                      .style("stroke","white")
+                      .style("stroke-width",1)
+                      .style("stroke-linejoin", "round");
+              d3.select(this)
+                      .style("stroke","red")
+                      .style("stroke-width",3)
+                      .style("stroke-linejoin", "round");
+              updateBar(d.properties.name);
+            });
+          }
+          })
+        });
+
+        function updateMap(subCategory) {
+          if (subCategory == "all") {
+            d3.select("#MapTitle").text("Area: profits of all categories");
+            var allprofitInfo = d3.map(profitInfoMap,function (d) {
+              return d.state;
+            });
+            updateMapByNewProfit(allprofitInfo);
+
+          } else {
+            d3.select("#MapTitle").text("Area: profits of " + subCategory);
+            // 得到该产品在每个州的销售信息
+            var curprofitInfo = nestBySubCategory.get(subCategory).values;
+            var curprofitInfoMap = d3.map(curprofitInfo, function(d) {
+            return d.state;
+            });  // 转换映射表形式，以根据州名检索销售情况
+            updateMapByNewProfit(curprofitInfoMap);
+          }
+        }
+
+        function updateMapByNewProfit(curData) {
+          // 重新定义颜色比例尺
+          var extent = d3.extent(curData.values(), d => d.profit);
+          var color = d3.scaleQuantize([-extent[1], extent[1]], d3.schemeRdBu[8]);
+          mapSpace.select("g").selectAll("path")
+            .transition()
+            .duration(400)
+            .ease(d3.easeLinear)
+            .attr("fill", function(d) { // 更新每个州的区域颜色
+              var info = curData.get(d.properties.name);
+              if (info == undefined) return "gray";
+              else {
+                return color(info.profit);
+              }
+            })
+            .select("title")
+            .text(function(d) {   // 更新每个州的title信息。
+              var info = curData.get(d.properties.name);
+              if (info != undefined)
+                return d.properties.name + "\n" + d3.format(".2f")(info.profit);
+              else {
+                return d.properties.name;
+              }
+            });
+        }
+      </script>
+    </div>
+    <div>
+      <h2>Other</h2>
+      <svg id="OtherBox">
+        <g id="ViewBox"></g>
+        <g id="xAxis"></g>
+        <g id="yAxis"></g>
+      </svg>
+      <style>
+        .inner_line line {
+            fill: none;
+            stroke:#E7E7E7;
+            shape-rendering: crispEdges;
+        }
+      </style>
+      <script src="d3/d3.js"></script>
+      <script>
+        var lineChartWidth = 1240;
+        var lineChartHeight = 620;
+        var lineChartPadding = {
+          top:30,
+          left:80,
+          bottom:30,
+          right:30
+        };
+        var lineChart = d3.select("#OtherBox")
+        .attr("width",lineChartWidth)
+        .attr("height",lineChartHeight);
+
+        var sortedData;
+        var nestByTime;
+        var allYears;
+        var curYear;
+        var popData;
+        d3.csv("./data/time.CSV").then(function(data){
+          // 转换为数值类型
+          data.forEach((item,i)=>{
+            item.date = item.year+"-"+item.month+"-"+item.day;
+            item.profit = +item.profit;
+            item.sales = +item.sales;
+          });
+
+          // 按日期重新组织数据
+          nestByTime = d3.nest()
+          .key(function(d) {
+            return d.date;
+          })
+          .entries(data);
+
+          sortedData = nestByTime.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            return {
+              date:d.key,
+              profit: sumProfit,
+              sales: sumSales
+            };
+          });
+
+          var formatYear = d3.timeFormat("%Y");
+          var FormatTime = d3.timeParse("%Y-%m-%d");
+
+          allYears = sortedData.map(function (element) {
+            element.date = FormatTime(element.date);
+            var year = formatYear(element.date);
+            return year;
+          })
+          allYears = d3.set(allYears).values();
+          allYears.sort();
+
+          curYear = allYears[0];
+          popData = sortedData.filter(function(element) {
+             var year = formatYear(element.date);
+            return year == curYear;
+          });
+
+          var formatMonth = d3.timeFormat("%B");
+          Data2 = d3.nest().key(function (d) {
+            return formatMonth(d.date);
+          }).entries(popData);
+
+          var finaldata = Data2.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            var Month = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            for(var i = 0 ; i<12 ;i++){
+              if(d.key == Month[i])
+                return{
+                  date: d.key,
+                  profit: sumProfit,
+                  sales: sumSales,
+                  num: i
+                }
+            }
+          });
+          finaldata.sort(function (a,b) {
+            return a.num - b.num;
+          });
+          popData = finaldata;
+        }).then(function () {
+          drawYearButtons();
+          darwBox(popData);
+        });
+
+        function drawYearButtons() {
+          var space = lineChart.append("rect")
+                  .attr("width", lineChartWidth)
+                  .attr("height", lineChartHeight)
+                  .attr("fill","white")
+                  .attr("opacity","0.2");
+
+            space.on("click",function () {
+              lineChart.selectAll("text")
+                      .style("fill","black")
+                      .style("stroke-linejoin", "round");
+              lineChart.selectAll(".line").remove();
+              lineChart.selectAll("circle").remove();
+            });
+
+          var g = lineChart.append('g');
+          var r = g.append("rect")
+                  .attr("width", 100)
+                  .attr("height", 120)
+                  .attr("x", lineChartWidth - lineChartPadding.right * 3.5)
+                  .attr("y", lineChartPadding.top)
+                  .attr("rx",6)
+                  .attr("ry",6)
+                  .attr("fill", "white")
+                  .style("stroke","black")
+                  .attr("opacity", "0.5");
+
+
+          var button1 = g.append("text")
+                  .data(allYears)
+                  .attr("x", lineChartWidth - lineChartPadding.right * 2.75)
+                  .attr("y", lineChartPadding.top)
+                  .attr("dy","1em")
+                  .attr("fill","black")
+                  .attr("font-size",25)
+                  .text(2011);
+
+          var button2 = g.append("text")
+                  .data(allYears)
+                  .attr("x", lineChartWidth - lineChartPadding.right * 2.75)
+                  .attr("y", lineChartPadding.top*2)
+                  .attr("dy","1em")
+                  .attr("fill","black")
+                  .attr("font-size",25)
+                  .text(2012);
+
+          var button3 = g.append("text")
+                  .data(allYears)
+                  .attr("x", lineChartWidth - lineChartPadding.right * 2.75)
+                  .attr("y", lineChartPadding.top*3)
+                  .attr("dy","1em")
+                  .attr("fill","black")
+                  .attr("font-size",25)
+                  .text(2013);
+
+          var button4 = g.append("text")
+                  .data(allYears)
+                  .attr("x", lineChartWidth - lineChartPadding.right * 2.75)
+                  .attr("y", lineChartPadding.top*4)
+                  .attr("dy","1em")
+                  .attr("fill","black")
+                  .attr("font-size",25)
+                  .text(2014);
+
+          button1.on("click",function (d) {
+              d3.select(this)
+                      .style("fill","red")
+                      .style("stroke-linejoin", "round");
+              updateByYear(2011);
+          });
+
+          button2.on("click",function (d) {
+              d3.select(this)
+                      .style("fill","red")
+                      .style("stroke-linejoin", "round");
+              updateByYear(2012);
+          });
+
+          button3.on("click",function (d) {
+              d3.select(this)
+                      .style("fill","red")
+                      .style("stroke-linejoin", "round");
+              updateByYear(2013);
+          });
+
+          button4.on("click",function (d) {
+              d3.select(this)
+                      .style("fill","red")
+                      .style("stroke-linejoin", "round");
+              updateByYear(2014);
+          });
+        }
+
+        function updateByYear(updateYear) {
+          var fomatYear = d3.timeFormat("%Y");
+          popData = sortedData.filter(function (element) {
+            var year = fomatYear(element.date)
+          return year == updateYear;
+          });
+          console.log(popData);
+
+          var formatMonth = d3.timeFormat("%B");
+          Data2 = d3.nest().key(function (d) {
+            return formatMonth(d.date);
+          }).entries(popData);
+
+          var finaldata = Data2.map(function (d) {
+            var sumProfit = d3.sum(d.values, function (item) {
+              return item.profit;
+            });
+            var sumSales = d3.sum(d.values, function (item) {
+              return item.sales;
+            });
+            var Month = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            for(var i = 0 ; i<12 ;i++){
+              if(d.key == Month[i])
+                return{
+                  date: d.key,
+                  profit: sumProfit,
+                  sales: sumSales,
+                  num: i
+                }
+            }
+          });
+          finaldata.sort(function (a,b) {
+            return a.num - b.num;
+          });
+
+          var xScale = d3.scalePoint()
+                  .domain(finaldata.map(function (d) {
+                    return d.date;
+                  }))
+                  .range([lineChartPadding.left,lineChartWidth-lineChartPadding.right*4])
+
+          var yScale = d3.scaleLinear()
+                  .domain([120000,-10000])
+                  .rangeRound([lineChartPadding.top,lineChartHeight-lineChartPadding.bottom])
+
+          var points = lineChart.select("#ViewBox").selectAll("MyCircle").data(finaldata);
+
+          points.join("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","green")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.sales); });
+
+          points.join("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","orange")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.profit); });
+
+          points.join("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","grey")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.sales - d.profit); });
+
+          var line1 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.sales);
+                  });
+
+          var line2 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.profit);
+                  });
+
+          var line3 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.sales - d.profit);
+                  });
+
+          lineChart.append("path")
+                  .datum(finaldata)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line1)
+                  .attr("fill","none")
+                  .attr("stroke","green")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+
+          lineChart.append("path")
+                  .datum(finaldata)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line2)
+                  .attr("fill","none")
+                  .attr("stroke","orange")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+
+          lineChart.append("path")
+                  .datum(finaldata)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line3)
+                  .attr("fill","none")
+                  .attr("stroke","grey")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+        }
+
+        function darwBox(Data) {
+          //绘制比例尺
+          var xScale = d3.scalePoint()
+                  .domain(Data.map(function (d) {
+                    return d.date;
+                  }))
+                  .range([lineChartPadding.left,lineChartWidth-lineChartPadding.right*4])
+
+          var yScale = d3.scaleLinear()
+                  .domain([120000,-10000])
+                  .rangeRound([lineChartPadding.top,lineChartHeight-lineChartPadding.bottom])
+
+          //绘制网格线
+          var yInner = d3.axisLeft()
+                  .scale(yScale)
+                  .tickSize(-lineChartWidth+lineChartPadding.left*2.5)
+                  .tickFormat("");
+          var yInnerBar = lineChart.select("#ViewBox").append("g")
+                  .attr("class", "inner_line")
+                  .style("fill","none")
+                  .attr("stroke","grey")
+                  .attr("transform", "translate("+xScale.range()[0]+")")
+                  .call(yInner);
+
+          var xInner = d3.axisBottom()
+                  .scale(xScale)
+                  .tickSize(lineChartHeight-lineChartPadding.top*2)
+                  .tickFormat("");
+          var xInnerBar = lineChart.select("#ViewBox").append("g")
+                  .attr("class", "inner_line")
+                  .style("fill","none")
+                  .attr("stroke","grey")
+                  .attr("transform", "translate(0,"+lineChartPadding.top+")")
+                  .call(xInner);
+
+          //绘制X坐标轴。
+          var xAxis = d3.axisBottom(xScale).ticks(11);
+         lineChart.select("#xAxis").call(xAxis)
+         .attr("transform","translate(0,"+yScale.range()[1]+")");
+
+          //绘制Y坐标轴。
+          var yAxis = d3.axisLeft(yScale);
+          lineChart.select("#yAxis").call(yAxis)
+          .attr("transform","translate(" + xScale.range()[0] +")");
+
+          //定义直线
+          var line1 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.sales);
+                  });
+
+          var line2 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.profit);
+                  });
+
+          var line3 = d3.line()
+                  .x(function (d) {
+                    return xScale(d.date);
+                  })
+                  .y(function (d) {
+                    return yScale(d.sales - d.profit);
+                  });
+
+          //绘制散点
+          var bindings = lineChart.select("#ViewBox").selectAll("MyCircle").data(Data);
+          var enterPoint = bindings.enter();
+          var exitPoint = bindings.exit();
+
+          enterPoint.append("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","green")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.sales); })
+
+          enterPoint.append("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","orange")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.profit); });
+
+          enterPoint.append("circle")
+                  .attr("transform","translate(0,0)")
+                  .attr("r", 3)
+                  .attr("fill","grey")
+                  .attr("opacity", 0)
+                  .transition()
+                  .duration(2000)
+                  .attr("cx", function(d){ return xScale(d.date); })
+                  .attr("opacity", 1)
+                  .attr("cy", function(d){ return yScale(d.sales - d.profit); });
+
+          //绘制直线
+          lineChart.append("path")
+                  .datum(Data)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line1)
+                  .attr("fill","none")
+                  .attr("stroke","green")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+
+          lineChart.append("path")
+                  .datum(Data)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line2)
+                  .attr("fill","none")
+                  .attr("stroke","orange")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+
+          lineChart.append("path")
+                  .datum(Data)
+                  .attr("class","line")
+                  .attr("opacity", 0)
+                  .attr("d",line3)
+                  .attr("fill","none")
+                  .attr("stroke","grey")
+                  .attr("stroke-width","2px")
+                  .transition()
+                  .duration(2000)
+                  .attr("opacity", 1);
+
+          exitPoint.remove();
+        }
+
+      </script>
+    </div>
+  </div>
+
+
+
+</body></html>

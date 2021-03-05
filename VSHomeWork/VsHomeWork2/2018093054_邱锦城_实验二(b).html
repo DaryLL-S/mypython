@@ -1,0 +1,156 @@
+
+<!-- saved from url=(0130)https://elearning.szu.edu.cn/bbcswebdav/pid-495218-dt-content-rid-3810139_1/courses/201920202150298000103/index-p1-incomplete.html -->
+<html><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+  <style>
+    body {
+      font-family: Helvetica, Arial, sans-serif
+    }
+
+    h1 {
+      background-color: steelblue;
+      color:white;
+      padding: 5px;
+    }
+    h2 {
+      color: black;
+    }
+
+    svg {
+      border: 2px solid grey;
+    }
+
+    .mainView{
+      display: flex;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Global Sales</h1>
+  <div class="mainView">
+    <div>
+      <h2>Categories: sales and profit</h2>
+      <svg id="CategoryChart">
+        <g id = "rects"></g>
+        <g id = "xAxis"></g>
+        <g id = "yAxis"></g>
+      </svg>
+      <script src="d3/d3.js"></script>
+      <script>
+        var barChartWidth = 480,
+                barChartHeight = 480;
+        var barChartPadding = {
+          top:30,
+          left:80,
+          bottom:30,
+          right:30
+        };
+        var barChart = d3.select("#CategoryChart")
+        .attr("width",barChartWidth)
+        .attr("height",barChartHeight);
+
+        var barData;
+        d3.csv("data/sub-categories-sales.csv", function(d){
+          return {
+            subCategory:d.SubCategory,
+            profit:+d.Profit,//将“Profit”列转换为数字
+            sales:+d.Sales//将“Sales”列转换为数字
+          };
+        }).then(function (data) {
+          barData = data;//将读入的数据赋值给barData
+          drawBarChart();// 根据barData来绘制柱状图
+        });
+
+        function drawBarChart() {
+          //定义水平方向比例尺
+          var maxSales = d3.max(barData,function (d) {
+            return d.sales;
+          });//得到最大销量
+          var xScale = d3.scaleLinear()
+          .domain([0,maxSales])//设置输入域
+          .range([barChartPadding.left,barChartWidth-barChartPadding.right]);
+
+          //定义垂直方向比例尺
+          var yScale = d3.scaleBand()
+          .domain(barData.map(function (d) {
+            return d.subCategory;
+          }))//得到所有类别信息
+          .rangeRound([barChartPadding.top,barChartHeight-barChartPadding.bottom])//设置输出范围
+          .paddingInner(0.3);
+
+          //定义颜色比例尺
+          var maxProfit = d3.max(barData,function (d) {
+            return d.profit;
+          });
+          var color = d3.scaleDiverging()
+          .domain([-maxProfit,0,maxProfit])
+          .interpolator(d3.interpolateRdBu);
+
+
+
+          //绑定数据
+          var bindings = barChart.selectAll("rect")
+                  .data(barData);
+          var updateRects = bindings;
+          var enterRects = bindings.enter();
+          var exitRects = bindings.exit();
+
+          //enter部分处理方法
+          enterRects.append("rect")
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x", xScale(0)+1)
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          });
+
+
+          // update部分处理方法
+          updateRects.data(barData)
+          .attr("width",function (d) {
+            return xScale(d.sales)-xScale(0);
+          })
+          .attr("height", yScale.bandwidth())
+          .attr("x",xScale(0)+1)
+          .attr("y",function (d) {
+            return yScale(d.subCategory);
+          })
+          .attr("fill",function (d) {
+            return color(d.profit);
+          });
+
+          //exit部分处理方法
+          exitRects.remove();
+
+         //绘制X坐标轴
+         var xAxis = d3.axisBottom(xScale)
+         .ticks(5);
+         d3.select("#xAxis").call(xAxis)
+         .attr("transform","translate(0,"+(barChartHeight-barChartPadding.bottom)+")");
+
+          //绘制Y坐标轴。
+          var yAxis = d3.axisLeft(yScale);
+          d3.select('#yAxis').call(yAxis)
+          .attr("transform","translate(" + xScale.range()[0] +")");
+        }
+      </script>
+    </div>
+    <div>
+      <h2>Areas: profit of all categories</h2>
+      <svg id="Map"></svg>
+    </div>
+    <div>
+      <h2>Other</h2>
+      <svg id="Other"></svg>
+    </div>
+  </div>
+
+
+
+</body></html>
